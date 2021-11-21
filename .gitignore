@@ -1,0 +1,8 @@
+info.list
+package-lock.json
+package.json
+poetry.lock
+pyproject.toml
+node_modules
+.idea
+*~
