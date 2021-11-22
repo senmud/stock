@@ -1,13 +1,10 @@
-const http = require("http");
+const fs = require("fs");
 const jsdom = require("jsdom");
 const events = require("events");
-const fs = require("fs");
 const cliargs = require("minimist")
 const singlelog = require("./process_log");
 const dwn = require("./download");
 const avparser = require("./avtb_parser");
-
-//const { exit } = require("process");
 
 const {JSDOM} = jsdom;
 const HOST = "http://www.avtb2165.com";
@@ -15,10 +12,47 @@ var rateCtrl = new events.EventEmitter();
 var emitCnt = 1;
 var infolist = [];
 
-const args = cliargs(process.argv.slice(2), opts={default: {downloadlimit:0, maxpages:10, update:false, path:"./"}})
-//console.log(args);
-//process.exit(0);
+const args = cliargs(process.argv.slice(2), opts={default: {downloadlimit:0, maxpages:10, update:false, path:"./", clean:false}})
 
+if (args["clean"] === true) {
+    let asyncReaddir = () => {
+        let f = new Promise((resolve, reject) => {
+            fs.readdir(args["path"], (err, files) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+                return resolve(files)
+            });
+        })
+
+        f.then(files=>{
+            files.forEach(ff => {
+                if (ff.includes(".st")) {
+                    let name = ff.split(".").slice(0, -1).join(".");
+                    fs.rmSync(`${args["path"]}/${name}`);
+                    fs.rmSync(`${args["path"]}/${ff}`);
+                    console.log(`clean ${ff}, ${name}`);
+                }
+            })
+            //console.log(`total files: ${files.length}`)
+        })
+        .catch(err => console.log(`Err: clean path ${args['path']} fail, ${err}`))
+        .finally(()=>{
+            console.log("clean done");
+            process.exit(0);
+        })
+
+        return f;
+    }
+
+    let doRead = async () => {
+        await asyncReaddir();
+    }
+    
+    doRead();
+    return;
+}
 
 if (args["update"] === false && fs.existsSync("./info.list")) {
     fs.readFile("./info.list", (err, data)=>{
