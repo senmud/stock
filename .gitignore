@@ -6,3 +6,6 @@ pyproject.toml
 node_modules
 .idea
 *~
+data
+*.pyc
+.DS_Store
