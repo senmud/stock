@@ -11,5 +11,5 @@ if __name__ == '__main__':
     ds.update_stocklist()
     ds.dump()
 
-    data = DumpStock.load_dataframe('002714' if len(sys.argv) < 2 else sys.argv[1])
+    data = DumpStock.load_dataframe('000815' if len(sys.argv) < 2 else sys.argv[1])
     print(data)

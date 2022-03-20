@@ -28,32 +28,40 @@ class DumpStock:
         for i in range(self.__concurrent):
             self.__queue.append([])
 
+        self.__total_hit_r = 0
+        self.__total_hit_g = 0
+        self.__total_hit_0 = 0
+        self.__total_protect = threading.Lock()
+        self.__hit_r:list = []
+        self.__hit_g:list = []
+
     def update_stocklist(self) -> None:
         df= ef.stock.get_realtime_quotes()
         #print(df)
 
-        codelist = []
-
-        for it in df.itertuples(index=True):
-            #print(getattr(it,'股票代码'))
-            codelist.append((getattr(it, '股票代码'), getattr(it, '股票名称')))
-
         with open('./stock_id.list', 'w') as fp:
-            json.dump(codelist, fp)
+            fp.write(df.to_json(orient='records'))
 
         with open('./stock_id.list', 'r') as fp:
-            ls = json.load(fp)
-        
-        self.__stocklst = ls
+            self.__stocklst = json.load(fp)
 
     def dump(self) -> None:
         tuple(map(lambda enu: self.__queue[enu[0] % self.__concurrent].append(enu[1]), enumerate(self.__stocklst)))
         thread_lst = tuple(map(lambda q: self.__proc_queue(q), self.__queue))
         tuple(map(lambda th: th.join(), thread_lst))
 
+        with open(f'./data/hit_r_{self.__today}', 'w') as fp:
+            json.dump(self.__hit_r, fp)
+        with open(f'./data/hit_g_{self.__today}', 'w') as fp:
+            json.dump(self.__hit_g, fp)
+        
+        print(f"总计: {self.__total_hit_r+self.__total_hit_g+self.__total_hit_0}, 上涨: {self.__total_hit_r}, 下跌: {self.__total_hit_g}, 无法判断: {self.__total_hit_0}")
+
     def __proc_queue(self, q:list) -> threading.Thread:
         def do_dump(q:list) -> None:
-            for id, name in q:
+            for stock_info in q:
+                #print(f'info: {stock_info}')
+                id = stock_info.get('股票代码')
                 datafile = f'./data/{id}.data'
                 reload = False
                 need = DumpStock.datafile_need_refresh(datafile)
@@ -64,23 +72,39 @@ class DumpStock:
                     continue
 
                 df = ef.stock.get_quote_history(id, beg=self.__from_date, end=self.__today) if need != 0 else DumpStock.load_dataframe(id)
+                if df.empty:
+                    #print(f'WARN: stock {id} has no data')
+                    continue
+
                 if reload:
-                    print(df)
+                    #print(df)
                     orgdf = DumpStock.load_dataframe(id)
                     df = pd.concat((orgdf, df))
                     #df = orgdf
 
-                hit = self.__strategy.execute(id, df) if self.__strategy != None else False
+                hit = self.__strategy.execute(id, stock_info, df) if self.__strategy != None else False
+                self.__inc_total(id, hit)
 
                 with open(datafile, 'w') as fp:
                     #json.dump(df.to_dict(), fp)
                     fp.write(df.to_json(orient='records'))
-                    print(f"{id}: {name}, {reload}") if True == hit else None
+                    print(f"HIT{'涨' if hit > 0 else '跌'}: {id}: {stock_info.get('股票名称')}, 流通市值{round(float(stock_info.get('流通市值'))/100000000.0,2)}亿元") if hit != 0 else None
 
         th = threading.Thread(target=do_dump, args=(q,))
         th.start()
         print(f'starting thread dump {len(q)} stocks ...')
         return th
+
+    def __inc_total(self, id:str, hit:int) -> None:
+        with self.__total_protect:
+            if hit > 0:
+                self.__total_hit_r += 1
+                self.__hit_r.append(id)
+            elif hit < 0:
+                self.__total_hit_g += 1
+                self.__hit_g.append(id)
+            else:
+                self.__total_hit_0 += 1
 
     @staticmethod
     def datafile_need_refresh(file:str) -> int:
@@ -98,8 +122,14 @@ class DumpStock:
 
     @staticmethod
     def load(id:str) -> dict:
+        obj = {}
         with open(f'./data/{id}.data', 'r') as fp:
-            obj = json.load(fp)
+            try:
+                obj = json.load(fp)
+            except json.JSONDecodeError as e:
+                print(f"WARN: stock {id} data invalid")
+            except Exception as e:
+                print(f'FATAL: stock {id} load fail - {e}')
         return obj
 
     @staticmethod
