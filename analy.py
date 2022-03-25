@@ -24,8 +24,10 @@ hit_count = 0; new_count = 0
 
 for sid in today_hitr:
     if sid in yestoday_hitr:
-        print(f"HIT_R: {sid}")
         hit_count += 1
+        data = ef.stock.get_quote_history(sid, yestoday, today)["最高"]
+        rate = round((data.iloc[-1] - data.iloc[0])/data.iloc[0], 2)
+        print(f"HIT_R: {sid} {data.iloc[0]} -> {data.iloc[-1]}, rate {round(rate*100,2)}%")
     else:
         new_count += 1
 
